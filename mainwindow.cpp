@@ -3,16 +3,31 @@
 #include <QMouseEvent>
 #include <QDebug>
 
-IngredientButton::IngredientButton(const QString &text, QWidget *parent) : QPushButton(text, parent) {}
+// 食材按钮类实现
+IngredientButton::IngredientButton(const QString &text, QWidget *parent) : QPushButton(text, parent), m_selected(false) {}
 
-void IngredientButton::mousePressEvent(QMouseEvent *event) {
-    QDrag *drag = new QDrag(this);
-    QMimeData *mime = new QMimeData();
-    mime->setText(text());
-    drag->setMimeData(mime);
-    drag->exec();
+bool IngredientButton::isSelected() const { return m_selected; }
+
+void IngredientButton::setSelected(bool selected) {
+    m_selected = selected;
+    if (m_selected) {
+        setStyleSheet("background-color: lightblue;");
+    } else {
+        setStyleSheet("");
+    }
 }
 
+void IngredientButton::mousePressEvent(QMouseEvent *event) {
+    m_selected = !m_selected;
+    if (m_selected) {
+        setStyleSheet("background-color: lightblue;");
+    } else {
+        setStyleSheet("");
+    }
+    QPushButton::mousePressEvent(event);
+}
+
+// 餐盘区域类实现
 PlateArea::PlateArea(QWidget *parent) : QWidget(parent) { setAcceptDrops(true); }
 QString PlateArea::currentIngredient() const { return m_current; }
 void PlateArea::clear() { m_current.clear(); }
@@ -29,6 +44,7 @@ void PlateArea::dropEvent(QDropEvent *event) {
     }
 }
 
+// 主窗口实现
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_score(0), m_totalScore(0) {
     m_ingredients << "🍣 三文鱼" << "🍤 虾" << "🦀 蟹肉" << "🐟 金枪鱼"
                   << "🥑 牛油果" << "🥒 黄瓜" << "🍚 鸡蛋" << "🦐 甜虾";
@@ -124,15 +140,18 @@ void MainWindow::setupUI() {
     ingLayout->setContentsMargins(15, 15, 15, 15);
     ingLayout->setSpacing(10);
 
-    QLabel *ingTitle = new QLabel("🥬 食材区", this);
+    QLabel *ingTitle = new QLabel("🥬 食材区（点击选择，最多3种）", this);
     ingTitle->setStyleSheet("font: bold 15px 'Noto Sans SC'; color: #3498db; text-align: center;");
     ingTitle->setAlignment(Qt::AlignCenter);
     ingLayout->addWidget(ingTitle);
 
-    for (const QString &ing : m_ingredients) {
+    for (int i = 0; i < m_ingredients.size(); ++i) {
+        const QString &ing = m_ingredients.at(i);
         IngredientButton *btn = new IngredientButton(ing, this);
         btn->setFixedSize(190, 45);
         btn->setStyleSheet("QPushButton { font: 14px 'Noto Sans SC'; color: #2c3e50; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; } QPushButton:hover { background: #3498db; color: white; }");
+        m_ingredientButtons.append(btn);
+        connect(btn, &QPushButton::clicked, this, &MainWindow::onIngredientButtonClicked);
         ingLayout->addWidget(btn);
     }
     center->addWidget(ingArea);
@@ -154,6 +173,27 @@ void MainWindow::setupUI() {
     line4->setStyleSheet("color: #bdc3c7;");
     main->addWidget(line4);
 
+    // 制作结果提示标签
+    m_resultLabel = new QLabel("", this);
+    m_resultLabel->setAlignment(Qt::AlignCenter);
+    m_resultLabel->setStyleSheet("font: bold 18px 'Noto Sans SC'; text-align: center;");
+    main->addWidget(m_resultLabel);
+
+    // 开始制作和清空选择按钮
+    QHBoxLayout *actionBtnLayout = new QHBoxLayout();
+    actionBtnLayout->setSpacing(30);
+    actionBtnLayout->setAlignment(Qt::AlignCenter);
+
+    m_startMakingBtn = new QPushButton("开始制作", this);
+    m_startMakingBtn->setFixedSize(150, 45);
+    actionBtnLayout->addWidget(m_startMakingBtn);
+
+    m_clearBtn = new QPushButton("清空选择", this);
+    m_clearBtn->setFixedSize(150, 45);
+    actionBtnLayout->addWidget(m_clearBtn);
+
+    main->addLayout(actionBtnLayout);
+
     m_generateBtn = new QPushButton("🎲 随机订单", this);
     m_generateBtn->setFixedSize(180, 50);
     m_generateBtn->setStyleSheet("QPushButton { font: 18px 'Noto Sans SC'; color: white; background: #e67e22; border: none; border-radius: 25px; } QPushButton:hover { background: #d35400; }");
@@ -163,6 +203,8 @@ void MainWindow::setupUI() {
     connect(m_plateArea, &PlateArea::ingredientDropped, this, &MainWindow::onIngredientDropped);
     connect(m_addRiceBtn, &QPushButton::clicked, this, &MainWindow::onAddRiceClicked);
     connect(m_addSalmonBtn, &QPushButton::clicked, this, &MainWindow::onAddSalmonClicked);
+    connect(m_startMakingBtn, &QPushButton::clicked, this, &MainWindow::onStartMaking);
+    connect(m_clearBtn, &QPushButton::clicked, this, &MainWindow::onClearSelection);
 }
 
 void MainWindow::generateOrder() {
@@ -210,4 +252,80 @@ void MainWindow::assembleSushi() {
 
 void MainWindow::updateIngredientDisplay() {
     m_currentIngredients->setText(m_assembledIngredients.isEmpty() ? "当前食材: 空" : "当前食材: " + m_assembledIngredients.join(" + "));
+}
+
+// 食材按钮点击处理
+void MainWindow::onIngredientButtonClicked() {
+    m_selectedIngredients.clear();
+    int count = 0;
+    
+    for (IngredientButton *btn : m_ingredientButtons) {
+        if (btn->isSelected()) {
+            if (count >= 3) {
+                btn->setSelected(false);
+                continue;
+            }
+            m_selectedIngredients.append(btn->text());
+            count++;
+        }
+    }
+    
+    m_currentIngredients->setText(m_selectedIngredients.isEmpty() ? "当前食材: 空" : "当前食材: " + m_selectedIngredients.join(" + "));
+}
+
+// 配方检查函数
+bool MainWindow::checkRecipe() {
+    if (m_selectedIngredients.size() != 2) return false;
+    
+    bool hasRice = m_selectedIngredients.contains("🍚 米饭") || m_selectedIngredients.contains("🍚 鸡蛋");
+    bool hasFish = m_selectedIngredients.contains("🍣 三文鱼") || m_selectedIngredients.contains("🍤 虾") || 
+                   m_selectedIngredients.contains("🦀 蟹肉") || m_selectedIngredients.contains("🐟 金枪鱼") ||
+                   m_selectedIngredients.contains("🦐 甜虾");
+    
+    return hasRice && hasFish;
+}
+
+// 获取配方名称
+QString MainWindow::getRecipeName() {
+    if (m_selectedIngredients.contains("🍣 三文鱼")) return "三文鱼寿司";
+    if (m_selectedIngredients.contains("🍤 虾")) return "虾寿司";
+    if (m_selectedIngredients.contains("🦀 蟹肉")) return "蟹肉寿司";
+    if (m_selectedIngredients.contains("🐟 金枪鱼")) return "金枪鱼寿司";
+    if (m_selectedIngredients.contains("🦐 甜虾")) return "甜虾寿司";
+    return "寿司";
+}
+
+// 开始制作
+void MainWindow::onStartMaking() {
+    if (m_selectedIngredients.isEmpty()) {
+        m_resultLabel->setText("请先选择食材");
+        m_resultLabel->setStyleSheet("color: red;");
+        return;
+    }
+    
+    if (m_selectedIngredients.size() != 2) {
+        m_resultLabel->setText("需要选择2种食材（米饭+鱼肉）");
+        m_resultLabel->setStyleSheet("color: red;");
+        return;
+    }
+    
+    if (checkRecipe()) {
+        m_resultLabel->setText("制作成功！" + getRecipeName());
+        m_resultLabel->setStyleSheet("color: green;");
+        m_totalScore += 20;
+        qDebug() << "制作成功！+20分，总分:" << m_totalScore;
+    } else {
+        m_resultLabel->setText("制作失败！配方不正确");
+        m_resultLabel->setStyleSheet("color: red;");
+    }
+}
+
+// 清空选择
+void MainWindow::onClearSelection() {
+    for (IngredientButton *btn : m_ingredientButtons) {
+        btn->setSelected(false);
+    }
+    m_selectedIngredients.clear();
+    m_currentIngredients->setText("当前食材: 空");
+    m_resultLabel->setText("");
 }

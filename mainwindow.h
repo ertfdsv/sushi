@@ -16,8 +16,12 @@ class IngredientButton : public QPushButton
     Q_OBJECT
 public:
     IngredientButton(const QString &text, QWidget *parent = nullptr);
+    bool isSelected() const;
+    void setSelected(bool selected);
 protected:
     void mousePressEvent(QMouseEvent *event) override;
+private:
+    bool m_selected;
 };
 
 class PlateArea : public QWidget
@@ -48,11 +52,16 @@ private slots:
     void onAddRiceClicked();
     void onAddSalmonClicked();
     void assembleSushi();
+    void onIngredientButtonClicked();
+    void onStartMaking();
+    void onClearSelection();
 
 private:
     void setupUI();
     void generateOrder();
     void updateIngredientDisplay();
+    bool checkRecipe();
+    QString getRecipeName();
 
     QStringList m_ingredients;
     QLabel *m_orderLabel;
@@ -66,6 +75,12 @@ private:
     QLabel *m_currentIngredients;
     int m_totalScore;
     QStringList m_assembledIngredients;
+
+    QList<IngredientButton*> m_ingredientButtons;
+    QStringList m_selectedIngredients;
+    QLabel *m_resultLabel;
+    QPushButton *m_startMakingBtn;
+    QPushButton *m_clearBtn;
 };
 
 #endif
