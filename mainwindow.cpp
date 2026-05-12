@@ -2,330 +2,595 @@
 #include <QRandomGenerator>
 #include <QMouseEvent>
 #include <QDebug>
+#include <QPalette>
+#include <QGridLayout>
+#include <QSizePolicy>
+#include <QDrag>
+#include <QMimeData>
+#include <QPainter>
+#include <QMessageBox>
 
-// 食材按钮类实现
-IngredientButton::IngredientButton(const QString &text, QWidget *parent) : QPushButton(text, parent), m_selected(false) {}
+class PlateArea : public QWidget
+{
+public:
+    PlateArea(QWidget *parent = nullptr) : QWidget(parent), m_hasRice(false), m_hasFish(false), m_sushiMade(false), m_hasIngredient(false), m_isMoving(false), m_moveOffset(0) {
+        setAcceptDrops(true);
+        setMinimumSize(280, 120);
+        setStyleSheet("background: #f5e6d3; border-radius: 10px; border: 3px solid #8B4513;");
+    }
+
+    void clear() { m_hasRice = false; m_hasFish = false; m_sushiMade = false; m_hasIngredient = false; m_riceText.clear(); m_fishText.clear(); m_isMoving = false; m_moveOffset = 0; update(); }
+    void addIngredient(const QString &ing) {
+        m_hasIngredient = true;
+        if (ing.contains("米饭")) {
+            m_hasRice = true;
+            m_riceText = ing;
+        } else {
+            m_hasFish = true;
+            m_fishText = ing;
+        }
+        update();
+    }
+    bool hasIngredients() const { return m_hasIngredient; }
+    bool canMakeSushi() const { return m_hasRice && m_hasFish; }
+    void setSushiMade(bool made) { m_sushiMade = made; update(); }
+    void setMoving(bool moving) { m_isMoving = moving; m_moveOffset = 0; }
+    void setMoveOffset(int offset) { m_moveOffset = offset; }
+    int getMoveOffset() const { return m_moveOffset; }
+    QString getFishText() const { return m_fishText; }
+    QString getRiceText() const { return m_riceText; }
+    bool isMoving() const { return m_isMoving; }
+
+protected:
+    void dragEnterEvent(QDragEnterEvent *event) override {
+        if (event->mimeData()->hasText()) {
+            event->acceptProposedAction();
+            update();
+        }
+    }
+
+    void dragLeaveEvent(QDragLeaveEvent *event) override {
+        update();
+    }
+
+    void dropEvent(QDropEvent *event) override {
+        if (event->mimeData()->hasText()) {
+            QString text = event->mimeData()->text();
+            addIngredient(text);
+            event->acceptProposedAction();
+        }
+    }
+
+    void paintEvent(QPaintEvent *event) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        int sushiX = width()/2 - 50 - m_moveOffset;
+        int sushiY = height()/2 - 30;
+
+        if (m_sushiMade && !m_isMoving) {
+            sushiX = width()/2 - 50;
+
+            QString sushiIcon = "🍣";
+            if (m_fishText.contains("三文鱼")) sushiIcon = "🍣";
+            else if (m_fishText.contains("虾") && !m_fishText.contains("甜虾")) sushiIcon = "🍤";
+            else if (m_fishText.contains("蟹肉")) sushiIcon = "🦀";
+            else if (m_fishText.contains("金枪鱼")) sushiIcon = "🐟";
+            else if (m_fishText.contains("甜虾")) sushiIcon = "🦐";
+
+            p.setBrush(QBrush(QColor(255, 255, 255)));
+            p.drawEllipse(sushiX, sushiY, 100, 60);
+            p.setBrush(QBrush(QColor(250, 100, 100)));
+            p.drawEllipse(sushiX + 10, sushiY + 10, 80, 40);
+            QFont emojiFont("Segoe UI Emoji", 32);
+            p.setFont(emojiFont);
+            p.drawText(QRect(sushiX, sushiY, 100, 60), Qt::AlignCenter, sushiIcon);
+
+            p.setPen(QPen(QColor(139, 69, 19), 2));
+            for (int i = 0; i < 8; ++i) {
+                int lineX = 15 + i * 35 - m_moveOffset;
+                if (lineX > sushiX - 20 && lineX < sushiX + 120) continue;
+                p.drawLine(lineX, 8, lineX, height() - 8);
+            }
+        } else if (m_isMoving) {
+            QString sushiIcon = "🍣";
+            if (m_fishText.contains("三文鱼")) sushiIcon = "🍣";
+            else if (m_fishText.contains("虾") && !m_fishText.contains("甜虾")) sushiIcon = "🍤";
+            else if (m_fishText.contains("蟹肉")) sushiIcon = "🦀";
+            else if (m_fishText.contains("金枪鱼")) sushiIcon = "🐟";
+            else if (m_fishText.contains("甜虾")) sushiIcon = "🦐";
+
+            p.setBrush(QBrush(QColor(255, 255, 255)));
+            p.drawEllipse(sushiX, sushiY, 100, 60);
+            p.setBrush(QBrush(QColor(250, 100, 100)));
+            p.drawEllipse(sushiX + 10, sushiY + 10, 80, 40);
+            QFont emojiFont("Segoe UI Emoji", 32);
+            p.setFont(emojiFont);
+            p.drawText(QRect(sushiX, sushiY, 100, 60), Qt::AlignCenter, sushiIcon);
+
+            p.setOpacity(0.7);
+            QFont textFont("Microsoft YaHei", 10);
+            p.setFont(textFont);
+            p.setPen(QColor(139, 69, 19));
+            p.drawText(rect(), Qt::AlignBottom | Qt::AlignCenter, "正在上餐中...");
+            p.setOpacity(1.0);
+
+            p.setPen(QPen(QColor(139, 69, 19), 2));
+            for (int i = 0; i < 8; ++i) {
+                int lineX = 15 + i * 35 - m_moveOffset;
+                if (lineX > sushiX - 20 && lineX < sushiX + 120) continue;
+                p.drawLine(lineX, 8, lineX, height() - 8);
+            }
+        } else {
+            p.setPen(QPen(QColor(139, 69, 19), 2));
+            for (int i = 0; i < 8; ++i) {
+                int lineX = 15 + i * 35;
+                p.drawLine(lineX, 8, lineX, height() - 8);
+            }
+
+            QFont emojiFont("Segoe UI Emoji", 20);
+            p.setFont(emojiFont);
+
+            int centerX = width() / 2;
+            int centerY = height() / 2;
+
+            if (m_hasRice && m_hasFish) {
+                p.drawText(QPoint(centerX - 80, centerY + 8), m_riceText);
+                p.drawText(QPoint(centerX + 10, centerY + 8), m_fishText);
+            } else if (m_hasRice) {
+                p.drawText(QPoint(centerX - 40, centerY + 8), m_riceText);
+                p.drawText(rect(), Qt::AlignCenter, "🍙 + ?");
+            } else if (m_hasFish) {
+                p.drawText(QPoint(centerX - 40, centerY + 8), m_fishText);
+                p.drawText(rect(), Qt::AlignCenter, "? + 🍙");
+            } else {
+                p.drawText(rect(), Qt::AlignCenter, "🍙 拖拽食材到此处");
+            }
+        }
+    }
+
+private:
+    bool m_hasRice;
+    bool m_hasFish;
+    bool m_sushiMade;
+    bool m_hasIngredient;
+    QString m_riceText;
+    QString m_fishText;
+    int m_moveOffset;
+    bool m_isMoving;
+};
+
+IngredientButton::IngredientButton(const QString &text, QWidget *parent) : QPushButton(text, parent), m_selected(false) {
+    setAttribute(Qt::WA_Hover);
+}
 
 bool IngredientButton::isSelected() const { return m_selected; }
 
 void IngredientButton::setSelected(bool selected) {
     m_selected = selected;
     if (m_selected) {
-        setStyleSheet("background-color: lightblue;");
+        setStyleSheet("background-color: #3498db; color: white;");
     } else {
         setStyleSheet("");
     }
 }
 
 void IngredientButton::mousePressEvent(QMouseEvent *event) {
-    m_selected = !m_selected;
-    if (m_selected) {
-        setStyleSheet("background-color: lightblue;");
-    } else {
-        setStyleSheet("");
+    if (event->button() == Qt::LeftButton) {
+        QDrag *drag = new QDrag(this);
+        QMimeData *mimeData = new QMimeData();
+        mimeData->setText(this->text());
+        drag->setMimeData(mimeData);
+        drag->exec(Qt::CopyAction);
     }
     QPushButton::mousePressEvent(event);
 }
 
-// 餐盘区域类实现
-PlateArea::PlateArea(QWidget *parent) : QWidget(parent) { setAcceptDrops(true); }
-QString PlateArea::currentIngredient() const { return m_current; }
-void PlateArea::clear() { m_current.clear(); }
-
-void PlateArea::dragEnterEvent(QDragEnterEvent *event) {
-    if (event->mimeData()->hasText()) event->acceptProposedAction();
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_score(0),
+    m_gold(100), m_totalEarned(0), m_timeLeft(120), m_gameOver(false), m_completedOrders(0), m_sushiPrice(0), m_isSubmitting(false) {
+    m_ingredients << "🍚 米饭" << "🍣 三文鱼" << "🍤 虾" << "🦀 蟹肉" << "🐟 金枪鱼" << "🦐 甜虾";
+    m_madeSushi = "";
+    m_plateArea = nullptr;
+    m_gameWidget = nullptr;
+    m_moveTimer = nullptr;
+    setupWelcomeUI();
 }
 
-void PlateArea::dropEvent(QDropEvent *event) {
-    if (event->mimeData()->hasText()) {
-        m_current = event->mimeData()->text();
-        emit ingredientDropped(m_current);
-        event->acceptProposedAction();
-    }
-}
+void MainWindow::setupWelcomeUI() {
+    setWindowTitle("开寿司");
+    setFixedSize(500, 600);
+    setStyleSheet("background: #e0f0f9;");
 
-// 主窗口实现
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_score(0), m_totalScore(0) {
-    m_ingredients << "🍣 三文鱼" << "🍤 虾" << "🦀 蟹肉" << "🐟 金枪鱼"
-                  << "🥑 牛油果" << "🥒 黄瓜" << "🍚 鸡蛋" << "🦐 甜虾";
-    setupUI();
-    generateOrder();
-}
+    QWidget *welcomeWidget = new QWidget(this);
+    setCentralWidget(welcomeWidget);
 
-void MainWindow::setupUI() {
-    setWindowTitle("🍣 寿司制作小游戏");
-    setFixedSize(850, 700);
+    QVBoxLayout *layout = new QVBoxLayout(welcomeWidget);
+    layout->setAlignment(Qt::AlignCenter);
+    layout->setSpacing(40);
 
-    QWidget *central = new QWidget(this);
-    central->setStyleSheet("background-color: #e0f0f9;");
-    setCentralWidget(central);
-
-    QVBoxLayout *main = new QVBoxLayout(central);
-    main->setContentsMargins(30, 30, 30, 30);
-    main->setSpacing(12);
-
-    QLabel *title = new QLabel("开寿司", this);
-    title->setStyleSheet("font: bold 44px 'Source Han Serif SC'; color: #2c3e50; text-align: center; letter-spacing: 12px;");
+    QLabel *title = new QLabel("开寿司", welcomeWidget);
     title->setAlignment(Qt::AlignCenter);
-    main->addWidget(title);
+    title->setStyleSheet("font: bold 72px \"Microsoft YaHei\"; color: #2c3e50; letter-spacing: 30px; background: transparent;");
 
-    QLabel *subtitle = new QLabel("KAI-SUSHI", this);
-    subtitle->setStyleSheet("font: 18px Arial; color: #7f8c8d; text-align: center; letter-spacing: 8px;");
+    QLabel *subtitle = new QLabel("KAI-SUSHI", welcomeWidget);
     subtitle->setAlignment(Qt::AlignCenter);
-    main->addWidget(subtitle);
+    subtitle->setStyleSheet("font: 20px Arial; color: #3498db; letter-spacing: 8px; background: transparent;");
 
-    QFrame *line1 = new QFrame(this);
+    QPushButton *startBtn = new QPushButton("开始营业", welcomeWidget);
+    startBtn->setFixedSize(200, 60);
+    startBtn->setCursor(Qt::PointingHandCursor);
+    startBtn->setStyleSheet("QPushButton { font: bold 22px \"Microsoft YaHei\"; color: white; background: #3498db; border: none; border-radius: 30px; } QPushButton:hover { background: #2980b9; }");
+
+    layout->addWidget(title);
+    layout->addWidget(subtitle);
+    layout->addWidget(startBtn);
+
+    connect(startBtn, &QPushButton::clicked, this, &MainWindow::onStartGame);
+}
+
+void MainWindow::onStartGame() {
+    setupGameUI();
+}
+
+void MainWindow::setupGameUI() {
+    setWindowTitle("🍣 寿司制作小游戏");
+    setFixedSize(600, 850);
+
+    m_gameWidget = new QWidget(this);
+    setCentralWidget(m_gameWidget);
+
+    QPalette pal;
+    pal.setColor(QPalette::Window, QColor(232, 240, 249));
+    m_gameWidget->setAutoFillBackground(true);
+    m_gameWidget->setPalette(pal);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(m_gameWidget);
+    mainLayout->setContentsMargins(15, 15, 15, 15);
+    mainLayout->setSpacing(10);
+
+    QLabel *title = new QLabel("🍣 开寿司", m_gameWidget);
+    title->setAlignment(Qt::AlignCenter);
+    title->setStyleSheet("font: bold 28px \"Microsoft YaHei\"; color: #2c3e50;");
+    mainLayout->addWidget(title);
+
+    QFrame *line1 = new QFrame(m_gameWidget);
     line1->setFrameShape(QFrame::HLine);
     line1->setStyleSheet("color: #bdc3c7;");
-    main->addWidget(line1);
+    mainLayout->addWidget(line1);
 
-    QLabel *orderTitle = new QLabel("📋 当前订单", this);
-    orderTitle->setStyleSheet("font: 14px 'Noto Sans SC'; color: #7f8c8d; text-align: center;");
-    orderTitle->setAlignment(Qt::AlignCenter);
-    main->addWidget(orderTitle);
+    QWidget *statusWidget = new QWidget(m_gameWidget);
+    QHBoxLayout *statusLayout = new QHBoxLayout(statusWidget);
+    statusLayout->setSpacing(80);
+    statusLayout->setAlignment(Qt::AlignCenter);
 
-    m_orderLabel = new QLabel("", this);
-    m_orderLabel->setStyleSheet("font: bold 32px 'Source Han Serif SC'; color: #e74c3c; text-align: center; padding: 15px; background: white; border-radius: 10px; border: 2px solid #f1c40f;");
-    m_orderLabel->setAlignment(Qt::AlignCenter);
-    m_orderLabel->setMinimumHeight(80);
-    main->addWidget(m_orderLabel);
+    m_goldLabel = new QLabel(QString("💰 %1 金币").arg(m_gold), statusWidget);
+    m_goldLabel->setAlignment(Qt::AlignCenter);
+    m_goldLabel->setStyleSheet("font: bold 16px \"Microsoft YaHei\"; color: #c0392b; background: #fef9e7; padding: 6px 20px; border-radius: 12px;");
+    statusLayout->addWidget(m_goldLabel);
 
-    QLabel *scoreLabel = new QLabel(QString("⭐ %1").arg(m_score), this);
-    scoreLabel->setStyleSheet("font: bold 16px 'Noto Sans SC'; color: #27ae60; text-align: center;");
-    scoreLabel->setAlignment(Qt::AlignCenter);
-    main->addWidget(scoreLabel);
+    m_timeLabel = new QLabel(QString("⏱️ %1 秒").arg(m_timeLeft), statusWidget);
+    m_timeLabel->setAlignment(Qt::AlignCenter);
+    m_timeLabel->setStyleSheet("font: bold 16px \"Microsoft YaHei\"; color: #c0392b; background: #fef9e7; padding: 6px 20px; border-radius: 12px;");
+    statusLayout->addWidget(m_timeLabel);
 
-    QFrame *line2 = new QFrame(this);
+    mainLayout->addWidget(statusWidget);
+
+    QFrame *line2 = new QFrame(m_gameWidget);
     line2->setFrameShape(QFrame::HLine);
     line2->setStyleSheet("color: #bdc3c7;");
-    main->addWidget(line2);
+    mainLayout->addWidget(line2);
 
-    QHBoxLayout *btnLayout = new QHBoxLayout();
-    btnLayout->setSpacing(20);
-    btnLayout->setAlignment(Qt::AlignCenter);
+    QWidget *customerWidget = new QWidget(m_gameWidget);
+    customerWidget->setStyleSheet("background: white; border-radius: 12px; border: 2px solid #3498db; padding: 10px;");
+    QVBoxLayout *customerLayout = new QVBoxLayout(customerWidget);
 
-    m_addRiceBtn = new QPushButton("🍚 添加米饭", this);
-    m_addRiceBtn->setFixedSize(130, 45);
-    m_addRiceBtn->setStyleSheet("QPushButton { font: 15px 'Noto Sans SC'; background: #27ae60; color: white; border: none; border-radius: 20px; } QPushButton:hover { background: #1e8449; }");
-    btnLayout->addWidget(m_addRiceBtn);
+    QLabel *customerTitle = new QLabel("👤 顾客想要:", customerWidget);
+    customerTitle->setAlignment(Qt::AlignCenter);
+    customerTitle->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: #2980b9;");
+    customerLayout->addWidget(customerTitle);
 
-    m_addSalmonBtn = new QPushButton("🍣 添加三文鱼", this);
-    m_addSalmonBtn->setFixedSize(130, 45);
-    m_addSalmonBtn->setStyleSheet("QPushButton { font: 15px 'Noto Sans SC'; background: #e67e22; color: white; border: none; border-radius: 20px; } QPushButton:hover { background: #d35400; }");
-    btnLayout->addWidget(m_addSalmonBtn);
-    main->addLayout(btnLayout);
+    m_customerLabel = new QLabel("三文鱼寿司", customerWidget);
+    m_customerLabel->setAlignment(Qt::AlignCenter);
+    m_customerLabel->setStyleSheet("font: bold 24px \"Microsoft YaHei\"; color: #e74c3c;");
+    customerLayout->addWidget(m_customerLabel);
 
-    m_currentIngredients = new QLabel("当前食材: 空", this);
-    m_currentIngredients->setStyleSheet("font: 14px 'Noto Sans SC'; color: #34495e; text-align: center; padding: 10px; background: white; border-radius: 8px;");
-    m_currentIngredients->setAlignment(Qt::AlignCenter);
-    main->addWidget(m_currentIngredients);
+    mainLayout->addWidget(customerWidget);
 
-    QLabel *totalScoreLabel = new QLabel(QString("💰 %1").arg(m_totalScore), this);
-    totalScoreLabel->setStyleSheet("font: bold 16px 'Noto Sans SC'; color: #9b59b6; text-align: center;");
-    totalScoreLabel->setAlignment(Qt::AlignCenter);
-    main->addWidget(totalScoreLabel);
-
-    QFrame *line3 = new QFrame(this);
+    QFrame *line3 = new QFrame(m_gameWidget);
     line3->setFrameShape(QFrame::HLine);
     line3->setStyleSheet("color: #bdc3c7;");
-    main->addWidget(line3);
+    mainLayout->addWidget(line3);
 
-    QHBoxLayout *center = new QHBoxLayout();
-    center->setSpacing(30);
+    QLabel *matLabel = new QLabel("🍙 寿司帘（拖拽食材到此处）", m_gameWidget);
+    matLabel->setAlignment(Qt::AlignCenter);
+    matLabel->setStyleSheet("font: bold 12px \"Microsoft YaHei\"; color: #8B4513;");
+    mainLayout->addWidget(matLabel);
 
-    QWidget *ingArea = new QWidget(this);
-    ingArea->setStyleSheet("background: white; border-radius: 12px; border: 2px solid #3498db;");
-    ingArea->setFixedWidth(220);
-    QVBoxLayout *ingLayout = new QVBoxLayout(ingArea);
-    ingLayout->setContentsMargins(15, 15, 15, 15);
-    ingLayout->setSpacing(10);
+    m_plateArea = new PlateArea(m_gameWidget);
+    mainLayout->addWidget(m_plateArea);
 
-    QLabel *ingTitle = new QLabel("🥬 食材区（点击选择，最多3种）", this);
-    ingTitle->setStyleSheet("font: bold 15px 'Noto Sans SC'; color: #3498db; text-align: center;");
-    ingTitle->setAlignment(Qt::AlignCenter);
-    ingLayout->addWidget(ingTitle);
-
-    for (int i = 0; i < m_ingredients.size(); ++i) {
-        const QString &ing = m_ingredients.at(i);
-        IngredientButton *btn = new IngredientButton(ing, this);
-        btn->setFixedSize(190, 45);
-        btn->setStyleSheet("QPushButton { font: 14px 'Noto Sans SC'; color: #2c3e50; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; } QPushButton:hover { background: #3498db; color: white; }");
-        m_ingredientButtons.append(btn);
-        connect(btn, &QPushButton::clicked, this, &MainWindow::onIngredientButtonClicked);
-        ingLayout->addWidget(btn);
-    }
-    center->addWidget(ingArea);
-
-    m_plateArea = new PlateArea(this);
-    m_plateArea->setStyleSheet("background: white; border-radius: 12px; border: 2px dashed #f39c12;");
-    m_plateArea->setFixedSize(220, 320);
-    QVBoxLayout *plateLayout = new QVBoxLayout(m_plateArea);
-    plateLayout->setContentsMargins(15, 15, 15, 15);
-    QLabel *plateTitle = new QLabel("🍱 餐盘", this);
-    plateTitle->setStyleSheet("font: bold 15px 'Noto Sans SC'; color: #f39c12; text-align: center;");
-    plateTitle->setAlignment(Qt::AlignCenter);
-    plateLayout->addWidget(plateTitle);
-    center->addWidget(m_plateArea);
-    main->addLayout(center);
-
-    QFrame *line4 = new QFrame(this);
+    QFrame *line4 = new QFrame(m_gameWidget);
     line4->setFrameShape(QFrame::HLine);
     line4->setStyleSheet("color: #bdc3c7;");
-    main->addWidget(line4);
+    mainLayout->addWidget(line4);
 
-    // 制作结果提示标签
-    m_resultLabel = new QLabel("", this);
+    QWidget *ingWidget = new QWidget(m_gameWidget);
+    ingWidget->setStyleSheet("background: white; border-radius: 12px; border: 2px solid #27ae60; padding: 10px;");
+    QVBoxLayout *ingLayout = new QVBoxLayout(ingWidget);
+    ingLayout->setSpacing(6);
+
+    QLabel *ingTitle = new QLabel("🥬 选择食材", ingWidget);
+    ingTitle->setAlignment(Qt::AlignCenter);
+    ingTitle->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: #27ae60;");
+    ingLayout->addWidget(ingTitle);
+
+    QGridLayout *gridLayout = new QGridLayout();
+    gridLayout->setSpacing(6);
+    for (int i = 0; i < m_ingredients.size(); ++i) {
+        const QString &ing = m_ingredients.at(i);
+        IngredientButton *btn = new IngredientButton(ing, ingWidget);
+        btn->setMinimumSize(150, 40);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        btn->setStyleSheet("QPushButton { font: 13px \"Microsoft YaHei\"; color: #2c3e50; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 5px; } QPushButton:hover { background: #3498db; color: white; }");
+        m_ingredientButtons.append(btn);
+        gridLayout->addWidget(btn, i / 3, i % 3);
+    }
+    ingLayout->addLayout(gridLayout);
+
+    mainLayout->addWidget(ingWidget);
+
+    QFrame *line5 = new QFrame(m_gameWidget);
+    line5->setFrameShape(QFrame::HLine);
+    line5->setStyleSheet("color: #bdc3c7;");
+    mainLayout->addWidget(line5);
+
+    m_resultLabel = new QLabel("", m_gameWidget);
     m_resultLabel->setAlignment(Qt::AlignCenter);
-    m_resultLabel->setStyleSheet("font: bold 18px 'Noto Sans SC'; text-align: center;");
-    main->addWidget(m_resultLabel);
+    m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; padding: 10px; border-radius: 8px;");
+    m_resultLabel->setMinimumHeight(40);
+    mainLayout->addWidget(m_resultLabel);
 
-    // 开始制作和清空选择按钮
-    QHBoxLayout *actionBtnLayout = new QHBoxLayout();
-    actionBtnLayout->setSpacing(30);
-    actionBtnLayout->setAlignment(Qt::AlignCenter);
+    QFrame *line6 = new QFrame(m_gameWidget);
+    line6->setFrameShape(QFrame::HLine);
+    line6->setStyleSheet("color: #bdc3c7;");
+    mainLayout->addWidget(line6);
 
-    m_startMakingBtn = new QPushButton("开始制作", this);
-    m_startMakingBtn->setFixedSize(150, 45);
-    actionBtnLayout->addWidget(m_startMakingBtn);
+    QWidget *actionWidget = new QWidget(m_gameWidget);
+    QHBoxLayout *actionLayout = new QHBoxLayout(actionWidget);
+    actionLayout->setSpacing(20);
+    actionLayout->setAlignment(Qt::AlignCenter);
 
-    m_clearBtn = new QPushButton("清空选择", this);
-    m_clearBtn->setFixedSize(150, 45);
-    actionBtnLayout->addWidget(m_clearBtn);
+    m_startMakingBtn = new QPushButton("🍣 制作", actionWidget);
+    m_startMakingBtn->setFixedSize(120, 50);
+    m_startMakingBtn->setStyleSheet("QPushButton { font: 16px \"Microsoft YaHei\"; background: #27ae60; color: white; border: none; border-radius: 25px; } QPushButton:hover { background: #1e8449; }");
+    actionLayout->addWidget(m_startMakingBtn);
 
-    main->addLayout(actionBtnLayout);
+    m_submitBtn = new QPushButton("📦 提交", actionWidget);
+    m_submitBtn->setFixedSize(120, 50);
+    m_submitBtn->setStyleSheet("QPushButton { font: 16px \"Microsoft YaHei\"; background: #3498db; color: white; border: none; border-radius: 25px; } QPushButton:hover { background: #2980b9; }");
+    actionLayout->addWidget(m_submitBtn);
 
-    m_generateBtn = new QPushButton("🎲 随机订单", this);
-    m_generateBtn->setFixedSize(180, 50);
-    m_generateBtn->setStyleSheet("QPushButton { font: 18px 'Noto Sans SC'; color: white; background: #e67e22; border: none; border-radius: 25px; } QPushButton:hover { background: #d35400; }");
-    main->addWidget(m_generateBtn, 0, Qt::AlignCenter);
+    m_clearBtn = new QPushButton("🗑️ 清空", actionWidget);
+    m_clearBtn->setFixedSize(120, 50);
+    m_clearBtn->setStyleSheet("QPushButton { font: 16px \"Microsoft YaHei\"; background: #95a5a6; color: white; border: none; border-radius: 25px; } QPushButton:hover { background: #7f8c8d; }");
+    actionLayout->addWidget(m_clearBtn);
 
-    connect(m_generateBtn, &QPushButton::clicked, this, &MainWindow::onGenerateOrder);
-    connect(m_plateArea, &PlateArea::ingredientDropped, this, &MainWindow::onIngredientDropped);
-    connect(m_addRiceBtn, &QPushButton::clicked, this, &MainWindow::onAddRiceClicked);
-    connect(m_addSalmonBtn, &QPushButton::clicked, this, &MainWindow::onAddSalmonClicked);
+    mainLayout->addWidget(actionWidget);
+
+    m_gameTimer = new QTimer(this);
+    m_moveTimer = new QTimer(this);
+
     connect(m_startMakingBtn, &QPushButton::clicked, this, &MainWindow::onStartMaking);
     connect(m_clearBtn, &QPushButton::clicked, this, &MainWindow::onClearSelection);
+    connect(m_gameTimer, &QTimer::timeout, this, &MainWindow::onTimerTimeout);
+    connect(m_submitBtn, &QPushButton::clicked, this, &MainWindow::onSubmitOrder);
+    connect(m_moveTimer, &QTimer::timeout, this, &MainWindow::onMoveAnimation);
+
+    generateCustomerOrder();
+    m_gameTimer->start(1000);
 }
 
-void MainWindow::generateOrder() {
-    m_currentOrderIndex = QRandomGenerator::global()->bounded(m_ingredients.size());
-    m_orderLabel->setText(m_ingredients[m_currentOrderIndex] + "寿司");
+void MainWindow::generateCustomerOrder() {
+    QStringList fishIngredients;
+    fishIngredients << "🍣 三文鱼" << "🍤 虾" << "🦀 蟹肉" << "🐟 金枪鱼" << "🦐 甜虾";
+    int index = QRandomGenerator::global()->bounded(fishIngredients.size());
+    m_customerOrder = fishIngredients.at(index);
+    m_customerLabel->setText(m_customerOrder + "寿司");
 }
 
-void MainWindow::onGenerateOrder() { generateOrder(); }
-
-void MainWindow::onIngredientDropped(const QString &text) {
-    if (text == m_ingredients[m_currentOrderIndex]) {
-        m_score += 10;
-        qDebug() << "正确！+10分，得分:" << m_score;
-        generateOrder();
-    } else {
-        m_score = qMax(0, m_score - 5);
-        qDebug() << "错误！-5分，得分:" << m_score;
-    }
-    m_plateArea->clear();
-}
-
-void MainWindow::onAddRiceClicked() {
-    m_assembledIngredients.append("🍚 米饭");
-    m_totalScore += 5;
-    qDebug() << "[组装] 米饭+5，总分:" << m_totalScore;
-    updateIngredientDisplay();
-}
-
-void MainWindow::onAddSalmonClicked() {
-    m_assembledIngredients.append("🍣 三文鱼");
-    m_totalScore += 15;
-    qDebug() << "[组装] 三文鱼+15，总分:" << m_totalScore;
-    updateIngredientDisplay();
-    assembleSushi();
-}
-
-void MainWindow::assembleSushi() {
-    if (m_assembledIngredients.contains("🍚 米饭") && m_assembledIngredients.contains("🍣 三文鱼")) {
-        m_totalScore += 10;
-        qDebug() << "🎉 组装成功！+10，总分:" << m_totalScore;
-        m_assembledIngredients.clear();
-        updateIngredientDisplay();
-    }
-}
-
-void MainWindow::updateIngredientDisplay() {
-    m_currentIngredients->setText(m_assembledIngredients.isEmpty() ? "当前食材: 空" : "当前食材: " + m_assembledIngredients.join(" + "));
-}
-
-// 食材按钮点击处理
 void MainWindow::onIngredientButtonClicked() {
-    m_selectedIngredients.clear();
+    if (m_gameOver) return;
+
+    QStringList selected;
     int count = 0;
-    
-    for (IngredientButton *btn : m_ingredientButtons) {
+
+    for (int i = 0; i < m_ingredientButtons.size(); ++i) {
+        IngredientButton *btn = m_ingredientButtons.at(i);
         if (btn->isSelected()) {
             if (count >= 3) {
                 btn->setSelected(false);
                 continue;
             }
-            m_selectedIngredients.append(btn->text());
+            selected.append(btn->text());
             count++;
         }
     }
-    
-    m_currentIngredients->setText(m_selectedIngredients.isEmpty() ? "当前食材: 空" : "当前食材: " + m_selectedIngredients.join(" + "));
+
+    m_resultLabel->setText(selected.isEmpty() ? "" : "已选: " + selected.join(" + "));
+    m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: #34495e; background: #f8f9fa; padding: 10px; border-radius: 8px;");
 }
 
-// 配方检查函数
 bool MainWindow::checkRecipe() {
-    if (m_selectedIngredients.size() != 2) return false;
-    
-    bool hasRice = m_selectedIngredients.contains("🍚 米饭") || m_selectedIngredients.contains("🍚 鸡蛋");
-    bool hasFish = m_selectedIngredients.contains("🍣 三文鱼") || m_selectedIngredients.contains("🍤 虾") || 
-                   m_selectedIngredients.contains("🦀 蟹肉") || m_selectedIngredients.contains("🐟 金枪鱼") ||
-                   m_selectedIngredients.contains("🦐 甜虾");
-    
-    return hasRice && hasFish;
+    if (!m_plateArea->canMakeSushi()) return false;
+    return true;
 }
 
-// 获取配方名称
 QString MainWindow::getRecipeName() {
-    if (m_selectedIngredients.contains("🍣 三文鱼")) return "三文鱼寿司";
-    if (m_selectedIngredients.contains("🍤 虾")) return "虾寿司";
-    if (m_selectedIngredients.contains("🦀 蟹肉")) return "蟹肉寿司";
-    if (m_selectedIngredients.contains("🐟 金枪鱼")) return "金枪鱼寿司";
-    if (m_selectedIngredients.contains("🦐 甜虾")) return "甜虾寿司";
+    QString fishText = m_plateArea->getFishText();
+    if (fishText.contains("三文鱼")) return "三文鱼寿司";
+    if (fishText.contains("虾") && !fishText.contains("甜虾")) return "虾寿司";
+    if (fishText.contains("蟹肉")) return "蟹肉寿司";
+    if (fishText.contains("金枪鱼")) return "金枪鱼寿司";
+    if (fishText.contains("甜虾")) return "甜虾寿司";
     return "寿司";
 }
 
-// 开始制作
-void MainWindow::onStartMaking() {
-    if (m_selectedIngredients.isEmpty()) {
-        m_resultLabel->setText("请先选择食材");
-        m_resultLabel->setStyleSheet("color: red;");
-        return;
-    }
-    
-    if (m_selectedIngredients.size() != 2) {
-        m_resultLabel->setText("需要选择2种食材（米饭+鱼肉）");
-        m_resultLabel->setStyleSheet("color: red;");
-        return;
-    }
-    
-    if (checkRecipe()) {
-        m_resultLabel->setText("制作成功！" + getRecipeName());
-        m_resultLabel->setStyleSheet("color: green;");
-        m_totalScore += 20;
-        qDebug() << "制作成功！+20分，总分:" << m_totalScore;
-    } else {
-        m_resultLabel->setText("制作失败！配方不正确");
-        m_resultLabel->setStyleSheet("color: red;");
+int MainWindow::getSushiPrice() {
+    QString fishText = m_plateArea->getFishText();
+    if (fishText.contains("三文鱼")) return 30;
+    if (fishText.contains("虾") && !fishText.contains("甜虾")) return 25;
+    if (fishText.contains("蟹肉")) return 28;
+    if (fishText.contains("金枪鱼")) return 35;
+    if (fishText.contains("甜虾")) return 22;
+    return 20;
+}
+
+bool MainWindow::matchCustomerOrder() {
+    int spaceIndex = m_customerOrder.indexOf(" ");
+    if (spaceIndex == -1) return false;
+    QString orderFish = m_customerOrder.mid(spaceIndex + 1);
+    return m_madeSushi.contains(orderFish);
+}
+
+void MainWindow::showGameOverDialog() {
+    QString message = QString("今日完成订单：%1 个\n\n总营业额：%2 金币").arg(m_completedOrders).arg(m_totalEarned);
+    QMessageBox::information(this, "🍣 游戏结束", message);
+}
+
+void MainWindow::onMoveAnimation() {
+    if (m_plateArea) {
+        int currentOffset = m_plateArea->getMoveOffset() + 10;
+        m_plateArea->setMoveOffset(currentOffset);
+        m_plateArea->update();
     }
 }
 
-// 清空选择
-void MainWindow::onClearSelection() {
-    for (IngredientButton *btn : m_ingredientButtons) {
-        btn->setSelected(false);
+void MainWindow::onStartMaking() {
+    if (m_gameOver) {
+        m_resultLabel->setText("游戏已结束");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #e74c3c; padding: 10px; border-radius: 8px;");
+        return;
     }
-    m_selectedIngredients.clear();
-    m_currentIngredients->setText("当前食材: 空");
+
+    if (!m_plateArea->hasIngredients()) {
+        m_resultLabel->setText("请先拖拽食材到寿司帘");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #e74c3c; padding: 10px; border-radius: 8px;");
+        return;
+    }
+
+    if (!m_plateArea->canMakeSushi()) {
+        m_resultLabel->setText("需要米饭+鱼肉两种食材");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #e74c3c; padding: 10px; border-radius: 8px;");
+        return;
+    }
+
+    if (!m_madeSushi.isEmpty()) {
+        m_resultLabel->setText("已制作过寿司，请提交或清空后再制作");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #f39c12; padding: 10px; border-radius: 8px;");
+        return;
+    }
+
+    m_madeSushi = getRecipeName();
+    m_sushiPrice = getSushiPrice();
+    m_plateArea->setSushiMade(true);
+
+    QString sushiIcon = "🍣";
+    QString fishText = m_plateArea->getFishText();
+    if (fishText.contains("三文鱼")) sushiIcon = "🍣";
+    else if (fishText.contains("虾") && !fishText.contains("甜虾")) sushiIcon = "🍤";
+    else if (fishText.contains("蟹肉")) sushiIcon = "🦀";
+    else if (fishText.contains("金枪鱼")) sushiIcon = "🐟";
+    else if (fishText.contains("甜虾")) sushiIcon = "🦐";
+
+    m_resultLabel->setText("制作成功！" + sushiIcon + " " + m_madeSushi + "（待提交）");
+    m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #3498db; padding: 10px; border-radius: 8px;");
+}
+
+void MainWindow::onClearSelection() {
+    for (int i = 0; i < m_ingredientButtons.size(); ++i) {
+        m_ingredientButtons.at(i)->setSelected(false);
+    }
+    if (m_plateArea) {
+        m_plateArea->clear();
+    }
     m_resultLabel->setText("");
+    m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; padding: 10px; border-radius: 8px;");
+    m_madeSushi = "";
+    m_sushiPrice = 0;
+    m_isSubmitting = false;
+}
+
+void MainWindow::onTimerTimeout() {
+    m_timeLeft--;
+    m_timeLabel->setText(QString("⏱️ %1 秒").arg(m_timeLeft));
+
+    if (m_timeLeft <= 0) {
+        m_gameTimer->stop();
+        m_gameOver = true;
+        m_timeLabel->setText("⏱️ 时间到！");
+        m_resultLabel->setText("游戏结束！金币: " + QString::number(m_gold) + " 得分: " + QString::number(m_score));
+        m_resultLabel->setStyleSheet("font: bold 16px \"Microsoft YaHei\"; color: white; background: #c0392b; padding: 12px; border-radius: 8px;");
+
+        m_startMakingBtn->setEnabled(false);
+        m_clearBtn->setEnabled(false);
+        m_submitBtn->setEnabled(false);
+
+        for (int i = 0; i < m_ingredientButtons.size(); ++i) {
+            m_ingredientButtons.at(i)->setEnabled(false);
+        }
+
+        showGameOverDialog();
+    }
+}
+
+void MainWindow::onSubmitOrder() {
+    if (m_gameOver) {
+        m_resultLabel->setText("游戏已结束");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #e74c3c; padding: 10px; border-radius: 8px;");
+        return;
+    }
+
+    if (m_madeSushi.isEmpty()) {
+        m_resultLabel->setText("请先制作寿司");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #e67e22; padding: 10px; border-radius: 8px;");
+        return;
+    }
+
+    if (m_isSubmitting) {
+        m_resultLabel->setText("正在上餐中，请稍候...");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #f39c12; padding: 10px; border-radius: 8px;");
+        return;
+    }
+
+    if (matchCustomerOrder()) {
+        m_isSubmitting = true;
+        int bonusGold = 15;
+
+        m_gold += m_sushiPrice + bonusGold;
+        m_totalEarned += m_sushiPrice + bonusGold;
+        m_score += 20;
+        m_completedOrders++;
+
+        m_goldLabel->setText(QString("💰 %1 金币").arg(m_gold));
+
+        m_resultLabel->setText("交付成功！+" + QString::number(m_sushiPrice) + "金币（寿司）+" + QString::number(bonusGold) + "金币（奖励）！总计：" + QString::number(m_totalEarned) + "金币");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #27ae60; padding: 10px; border-radius: 8px;");
+
+        m_plateArea->setMoving(true);
+        m_moveTimer->start(30);
+
+        QTimer::singleShot(1500, this, [=]() {
+            m_moveTimer->stop();
+            m_plateArea->setMoving(false);
+            m_plateArea->setMoveOffset(0);
+            m_madeSushi = "";
+            m_sushiPrice = 0;
+            m_isSubmitting = false;
+            onClearSelection();
+            generateCustomerOrder();
+        });
+    } else {
+        m_resultLabel->setText("这不是顾客想要的！想要：" + m_customerOrder + "寿司");
+        m_resultLabel->setStyleSheet("font: bold 14px \"Microsoft YaHei\"; color: white; background: #f39c12; padding: 10px; border-radius: 8px;");
+    }
 }

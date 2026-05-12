@@ -8,8 +8,10 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QStringList>
-#include <QDrag>
-#include <QMimeData>
+#include <QTimer>
+#include <QWidget>
+
+class PlateArea;
 
 class IngredientButton : public QPushButton
 {
@@ -24,22 +26,6 @@ private:
     bool m_selected;
 };
 
-class PlateArea : public QWidget
-{
-    Q_OBJECT
-public:
-    PlateArea(QWidget *parent = nullptr);
-    QString currentIngredient() const;
-    void clear();
-signals:
-    void ingredientDropped(const QString &text);
-protected:
-    void dragEnterEvent(QDragEnterEvent *event) override;
-    void dropEvent(QDropEvent *event) override;
-private:
-    QString m_current;
-};
-
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -47,40 +33,50 @@ public:
     MainWindow(QWidget *parent = nullptr);
 
 private slots:
-    void onGenerateOrder();
-    void onIngredientDropped(const QString &text);
-    void onAddRiceClicked();
-    void onAddSalmonClicked();
-    void assembleSushi();
     void onIngredientButtonClicked();
     void onStartMaking();
     void onClearSelection();
+    void onTimerTimeout();
+    void onSubmitOrder();
+    void onStartGame();
+    void onMoveAnimation();
 
 private:
-    void setupUI();
-    void generateOrder();
-    void updateIngredientDisplay();
+    void setupWelcomeUI();
+    void setupGameUI();
+    void generateCustomerOrder();
     bool checkRecipe();
     QString getRecipeName();
+    int getSushiPrice();
+    bool matchCustomerOrder();
+    void showGameOverDialog();
 
     QStringList m_ingredients;
-    QLabel *m_orderLabel;
-    QPushButton *m_generateBtn;
-    PlateArea *m_plateArea;
-    int m_currentOrderIndex;
-    int m_score;
-
-    QPushButton *m_addRiceBtn;
-    QPushButton *m_addSalmonBtn;
-    QLabel *m_currentIngredients;
-    int m_totalScore;
-    QStringList m_assembledIngredients;
-
+    QLabel *m_customerLabel;
     QList<IngredientButton*> m_ingredientButtons;
-    QStringList m_selectedIngredients;
     QLabel *m_resultLabel;
     QPushButton *m_startMakingBtn;
     QPushButton *m_clearBtn;
+    QPushButton *m_submitBtn;
+    PlateArea *m_plateArea;
+    QWidget *m_gameWidget;
+    QTimer *m_moveTimer;
+
+    int m_gold;
+    int m_totalEarned;
+    QLabel *m_goldLabel;
+
+    QTimer *m_gameTimer;
+    int m_timeLeft;
+    QLabel *m_timeLabel;
+    bool m_gameOver;
+
+    QString m_customerOrder;
+    QString m_madeSushi;
+    int m_score;
+    int m_completedOrders;
+    int m_sushiPrice;
+    bool m_isSubmitting;
 };
 
 #endif
